@@ -302,8 +302,8 @@ end
 --[=[
 	Gets a module by name. This will search both the Server and Shared.
 ]=]
-function KnitServer.GetModule(Name : string): {}
-
+function KnitServer.GetModule(Name : string): {} | nil 
+	
     for _,LibSide in ipairs({Server,Shared}) do
         
         local Search = LibSide:GetDescendants()
@@ -328,10 +328,10 @@ end
 	Gets a compiled Library by name. This will search both the Server and Shared folders. 
 ]=]
 function KnitServer.GetLibrary(Name : string): {[string]: {}}
+	print(Name)
+	local Compilation = {}
 
     local function Compile(Folder : Folder)
-
-        local FILE = {}
 
         local Sweep = Folder:GetChildren()
 
@@ -339,11 +339,9 @@ function KnitServer.GetLibrary(Name : string): {[string]: {}}
 
             if not Module:IsA("ModuleScript") then continue end
 
-            FILE[Module.Name] = require(Module)
+            Compilation[Module.Name] = require(Module)
 
         end
-
-        return FILE
 
     end
 
@@ -355,15 +353,13 @@ function KnitServer.GetLibrary(Name : string): {[string]: {}}
             
             if (not Folder:IsA("Folder")) or Folder.Name ~= Name then continue end
 
-            return Compile(Folder)
+            Compile(Folder)
 
         end
 
     end
 
-    warn("Knit Server : Could not locate FOLDER: "..Name)
-
-    return nil
+    return Compilation
 
 end
 

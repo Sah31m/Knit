@@ -374,7 +374,7 @@ end
 --[=[
 	Gets a module by name. This will search the Client and Shared folders.
 ]=]
-function KnitClient.GetModule(Name : string): {}
+function KnitClient.GetModule(Name : string): {} | nil
 
     for _,LibSide in ipairs({Client,Shared}) do
         
@@ -401,9 +401,9 @@ end
 ]=]
 function KnitClient.GetLibrary(Name : string): {[string]: {}}
 
-    local function Compile(Folder : Folder)
+	local Compilation = {}
 
-        local FILE = {}
+    local function Compile(Folder : Folder)
 
         local Sweep = Folder:GetChildren()
 
@@ -411,11 +411,9 @@ function KnitClient.GetLibrary(Name : string): {[string]: {}}
 
             if not Module:IsA("ModuleScript") then continue end
 
-            FILE[Module.Name] = require(Module)
+            Compilation[Module.Name] = require(Module)
 
         end
-
-        return FILE
 
     end
 
@@ -427,15 +425,13 @@ function KnitClient.GetLibrary(Name : string): {[string]: {}}
             
             if (not Folder:IsA("Folder")) or Folder.Name ~= Name then continue end
 
-            return Compile(Folder)
+            Compile(Folder)
 
         end
 
     end
 
-    warn("Knit Client : Could not locate FOLDER: "..Name)
-
-    return nil
+    return Compilation
 
 end
 
