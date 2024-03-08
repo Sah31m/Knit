@@ -117,16 +117,11 @@ local KnitServer = {}
 	pulled in via Wally instead of relying on Knit's Util folder, as this
 	folder only contains what is necessary for Knit to run in Wally mode.
 ]=]
-KnitServer.Util = (script.Parent :: Instance).Parent
+KnitServer.Util = script.Parent.Parent
 
 local SIGNAL_MARKER = newproxy(true)
 getmetatable(SIGNAL_MARKER).__tostring = function()
 	return "SIGNAL_MARKER"
-end
-
-local UNRELIABLE_SIGNAL_MARKER = newproxy(true)
-getmetatable(UNRELIABLE_SIGNAL_MARKER).__tostring = function()
-	return "UNRELIABLE_SIGNAL_MARKER"
 end
 
 local PROPERTY_MARKER = newproxy(true)
@@ -136,6 +131,10 @@ end
 
 local knitRepServiceFolder = Instance.new("Folder")
 knitRepServiceFolder.Name = "Services"
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
+local Server,Shared = ServerStorage.Library,ReplicatedStorage.Library.Shared
 
 local Promise = require(KnitServer.Util.Promise)
 local Comm = require(KnitServer.Util.Comm)
@@ -148,7 +147,6 @@ local onStartedComplete = Instance.new("BindableEvent")
 
 local function DoesServiceExist(serviceName: string): boolean
 	local service: Service? = services[serviceName]
-
 	return service ~= nil
 end
 
@@ -186,11 +184,8 @@ function KnitServer.CreateService(serviceDef: ServiceDef): Service
 	assert(type(serviceDef.Name) == "string", `Service.Name must be a string; got {type(serviceDef.Name)}`)
 	assert(#serviceDef.Name > 0, "Service.Name must be a non-empty string")
 	assert(not DoesServiceExist(serviceDef.Name), `Service "{serviceDef.Name}" already exists`)
-	assert(not started, `Services cannot be created after calling "Knit.Start()"`)
-
 	local service = serviceDef
 	service.KnitComm = ServerComm.new(knitRepServiceFolder, serviceDef.Name)
-
 	if type(service.Client) ~= "table" then
 		service.Client = { Server = service }
 	else
@@ -198,9 +193,7 @@ function KnitServer.CreateService(serviceDef: ServiceDef): Service
 			service.Client.Server = service
 		end
 	end
-
 	services[service.Name] = service
-
 	return service
 end
 
@@ -212,17 +205,13 @@ end
 	```
 ]=]
 function KnitServer.AddServices(parent: Instance): { Service }
-	assert(not started, `Services cannot be added after calling "Knit.Start()"`)
-
 	local addedServices = {}
 	for _, v in parent:GetChildren() do
 		if not v:IsA("ModuleScript") then
 			continue
 		end
-
 		table.insert(addedServices, require(v))
 	end
-
 	return addedServices
 end
 
@@ -230,17 +219,13 @@ end
 	Requires all the modules that are descendants of the given parent.
 ]=]
 function KnitServer.AddServicesDeep(parent: Instance): { Service }
-	assert(not started, `Services cannot be added after calling "Knit.Start()"`)
-
 	local addedServices = {}
 	for _, v in parent:GetDescendants() do
 		if not v:IsA("ModuleScript") then
 			continue
 		end
-
 		table.insert(addedServices, require(v))
 	end
-
 	return addedServices
 end
 
@@ -250,17 +235,7 @@ end
 function KnitServer.GetService(serviceName: string): Service
 	assert(started, "Cannot call GetService until Knit has been started")
 	assert(type(serviceName) == "string", `ServiceName must be a string; got {type(serviceName)}`)
-
 	return assert(services[serviceName], `Could not find service "{serviceName}"`) :: Service
-end
-
---[=[
-	Gets a table of all services.
-]=]
-function KnitServer.GetServices(): { [string]: Service }
-	assert(started, "Cannot call GetServices until Knit has been started")
-
-	return services
 end
 
 --[=[
@@ -289,29 +264,6 @@ end
 ]=]
 function KnitServer.CreateSignal()
 	return SIGNAL_MARKER
-end
-
---[=[
-	@return UNRELIABLE_SIGNAL_MARKER
-
-	Returns a marker that will transform the current key into
-	an unreliable RemoteSignal once the service is created. Should
-	only be called within the Client table of a service.
-
-	See [RemoteSignal](https://sleitnick.github.io/RbxUtil/api/RemoteSignal)
-	documentation for more info.
-
-	:::info Unreliable Events
-	Internally, this uses UnreliableRemoteEvents, which allows for
-	network communication that is unreliable and unordered. This is
-	useful for events that are not crucial for gameplay, since the
-	delivery of the events may occur out of order or not at all.
-
-	See  the documentation for [UnreliableRemoteEvents](https://create.roblox.com/docs/reference/engine/classes/UnreliableRemoteEvent)
-	for more info.
-]=]
-function KnitServer.CreateUnreliableSignal()
-	return UNRELIABLE_SIGNAL_MARKER
 end
 
 --[=[
@@ -345,6 +297,74 @@ end
 ]=]
 function KnitServer.CreateProperty(initialValue: any)
 	return { PROPERTY_MARKER, initialValue }
+end
+
+--[=[
+	Gets a module by name. This will search both the Server and Shared.
+]=]
+function KnitServer.GetModule(Name : string): {}
+
+    for _,LibSide in ipairs({Server,Shared}) do
+        
+        local Search = LibSide:GetDescendants()
+
+        for _,Module in ipairs(Search) do
+            
+            if (not Module:IsA("ModuleScript")) or Module.Name ~= Name then continue end
+
+            return require(Module)
+
+        end
+
+    end
+
+    warn("Knit Server : Could not locate MODULE: "..Name)
+
+    return nil
+
+end
+
+--[=[
+	Gets a compiled Library by name. This will search both the Server and Shared folders. 
+]=]
+function KnitServer.GetLibrary(Name : string): {[string]: {}}
+
+    local function Compile(Folder : Folder)
+
+        local FILE = {}
+
+        local Sweep = Folder:GetChildren()
+
+        for _,Module in ipairs(Sweep) do
+
+            if not Module:IsA("ModuleScript") then continue end
+
+            FILE[Module.Name] = require(Module)
+
+        end
+
+        return FILE
+
+    end
+
+    for _,LibSide in ipairs({Server,Shared}) do
+        
+        local Search = LibSide:GetDescendants()
+
+        for _,Folder in ipairs(Search) do
+            
+            if (not Folder:IsA("Folder")) or Folder.Name ~= Name then continue end
+
+            return Compile(Folder)
+
+        end
+
+    end
+
+    warn("Knit Server : Could not locate FOLDER: "..Name)
+
+    return nil
+
 end
 
 --[=[
@@ -388,8 +408,6 @@ function KnitServer.Start(options: KnitOptions?)
 
 	started = true
 
-	table.freeze(services)
-
 	if options == nil then
 		selectedOptions = defaultOptions
 	else
@@ -410,16 +428,12 @@ function KnitServer.Start(options: KnitOptions?)
 			local middleware = if service.Middleware ~= nil then service.Middleware else {}
 			local inbound = if middleware.Inbound ~= nil then middleware.Inbound else knitMiddleware.Inbound
 			local outbound = if middleware.Outbound ~= nil then middleware.Outbound else knitMiddleware.Outbound
-
 			service.Middleware = nil
-
 			for k, v in service.Client do
 				if type(v) == "function" then
 					service.KnitComm:WrapMethod(service.Client, k, inbound, outbound)
 				elseif v == SIGNAL_MARKER then
-					service.Client[k] = service.KnitComm:CreateSignal(k, false, inbound, outbound)
-				elseif v == UNRELIABLE_SIGNAL_MARKER then
-					service.Client[k] = service.KnitComm:CreateSignal(k, true, inbound, outbound)
+					service.Client[k] = service.KnitComm:CreateSignal(k, inbound, outbound)
 				elseif type(v) == "table" and v[1] == PROPERTY_MARKER then
 					service.Client[k] = service.KnitComm:CreateProperty(k, v[2], inbound, outbound)
 				end
