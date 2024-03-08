@@ -328,7 +328,7 @@ end
 	Gets a compiled Library by name. This will search both the Server and Shared folders. 
 ]=]
 function KnitServer.GetLibrary(Name : string): {[string]: {}}
-	print(Name)
+
 	local Compilation = {}
 
     local function Compile(Folder : Folder)
